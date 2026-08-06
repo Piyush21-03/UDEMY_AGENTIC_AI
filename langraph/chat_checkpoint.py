@@ -1,43 +1,77 @@
 from dotenv import load_dotenv
 from typing_extensions import TypedDict
 from typing import Annotated
+from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langgraph.graph import  StateGraph,START,END
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.mongodb import MongoDBSaver
 
 load_dotenv()
 
-llm= init_chat_model(
+llm = init_chat_model(
     model="gpt-4.1-mini",
     model_provider="openai"
 )
 
+
 class State(TypedDict):
-    messages:Annotated[list, add_messages]
-
-def chatbot(state:State):
-    response=llm.invoke(state.get("messages"))
-    return {"messages":[response]}
+    messages: Annotated[list, add_messages]
 
 
-graph_builder=StateGraph(State)
-graph_builder.add_node("chatbot",END)
+def chatbot(state: State):
+    response = llm.invoke(state["messages"])
+    return {"messages": [response]}
 
 
-graph_builder.add_edge(START,"chatbot")
-graph_builder.add_edge("chatbot","samplenode")
-graph_builder.add_edge("samplenode",END)
+graph_builder = StateGraph(State)
 
-graph=graph_builder.compile()
+graph_builder.add_node("chatbot", chatbot)
 
-def compile_graph_with_checkpointer():
-    DB_URl="mongodb://admin:admin@localhost:27017/lg" 
-    with MongoDBSaver.from_conn_string(DB_URl) as checkpointer:
-        graph=graph_builder.compile(checkpointer=checkpointer)
-    return graph
+graph_builder.add_edge(START, "chatbot")
+graph_builder.add_edge("chatbot", END)
 
-graph_with_checkpointer=compile_graph_with_checkpointer()
 
-updated_state=graph.checkpointer.invoke(State({"messages":["hi my name is Piyush Panigrahi"]}))
-print("\n\nUpdated State",updated_state)
+def compile_graph_with_checkpointer(checkpointer):
+    return graph_builder.compile(checkpointer=checkpointer)
+
+
+DB_URL = "mongodb://admin:admin@localhost:27017/?authSource=admin"
+
+with MongoDBSaver.from_conn_string(DB_URL) as checkpointer:
+
+    graph_with_checkpointer = compile_graph_with_checkpointer(checkpointer)
+
+    config = {
+        "configurable": {
+            "thread_id": "Piyush"
+        }
+    }
+
+    for chunk in graph_with_checkpointer.stream(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "what is my name"
+                }
+            ]
+        },
+        config=config,
+        stream_mode="values"
+    ):
+        chunk["messages"][-1].pretty_print()
+
+    updated_state = graph_with_checkpointer.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hi, my name is Piyush Panigrahi."
+                }
+            ]
+        },
+        config=config,
+    )
+
+    print("\nUpdated State:\n")
+    print(updated_state)
