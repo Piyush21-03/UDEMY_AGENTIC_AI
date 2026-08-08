@@ -26,6 +26,15 @@ config = {
             "model": "text-embedding-3-small"
         }
     },
+    "graph_store":{
+        "provider":"neo4j",
+        "config":{
+            "url":"neo4j+s://450745b0.databases.neo4j.io",
+            "username":"neo4j",
+            "password":"Uo7t6JY5J1P6sxLFSpQxCybViccR6Q2iF3v9kUcuFSI"
+
+        }
+    },
     "vector_store": {
         "provider": "qdrant",
         "config": {
